@@ -34,7 +34,8 @@
   border: 1px solid #ddd;
   border-radius: 12px;
   padding: 20px;
-  background: white;
+  background: black;
+  color: #222;
   box-sizing: border-box;
   margin-bottom: 20px;
 }
@@ -286,12 +287,24 @@ setStatus("Connected");
     }
 startBtn.addEventListener("click", async () => {
   try {
+
     startBtn.style.display = "none";
+
+    // switch from black start screen to normal chat screen
+    chatbox.style.background = "white";
+
     await startSession();
+
   } catch (error) {
+
     console.error(error);
+
     setStatus("Microphone access is required.");
+
     startBtn.style.display = "block";
+
+    // revert to black if start failed
+    chatbox.style.background = "black";
   }
 });
     
