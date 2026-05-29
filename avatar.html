@@ -37,14 +37,6 @@
       box-sizing: border-box;
       margin-bottom: 20px;
     }
-
-    #input {
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
-      box-sizing: border-box;
-      resize: none;
-    }
   </style>
 </head>
 
@@ -58,52 +50,82 @@
       </video>
 
       <div id="status">Connecting...</div>
-
       <div id="chatbox"></div>
-
-     <textarea id="input" placeholder="Type your message here..." rows="4"></textarea>
     </div>
   </div>
 
   <script type="module">
     import { createClient, AnamEvent } from "https://esm.sh/@anam-ai/js-sdk";
 
-    const CONDITION = "text_hidden_avatar";
+    const CONDITION = "voice_hidden_avatar";
 
     let client = null;
-    let assistantBuffer = "";
-    let assistantRow = null;
-    let assistantText = null;
     let transcript = [];
     let participantId = "unknown";
     let firstUserMessage = true;
 
+    let userBuffer = "";
+    let userRow = null;
+    let userText = null;
+
+    let assistantBuffer = "";
+    let assistantRow = null;
+    let assistantText = null;
+
     const statusEl = document.getElementById("status");
     const chatbox = document.getElementById("chatbox");
-    const inputEl = document.getElementById("input");
 
     function setStatus(text) {
       statusEl.textContent = text;
     }
 
-    function appendUserMessage(text) {
-      const p = document.createElement("p");
-      p.innerHTML = `<b>You:</b> ${text}`;
-      chatbox.appendChild(p);
+    function beginUserMessage() {
+      userRow = document.createElement("p");
+
+      const label = document.createElement("b");
+      label.textContent = "You: ";
+
+      userText = document.createElement("span");
+      userText.textContent = "";
+
+      userRow.appendChild(label);
+      userRow.appendChild(userText);
+
+      chatbox.appendChild(userRow);
       chatbox.scrollTop = chatbox.scrollHeight;
+    }
 
-      transcript.push({
-        role: "user",
-        content: text,
-        timestamp: new Date().toISOString()
-      });
-
-      if (firstUserMessage) {
-        const match = text.match(/P?\d+/i);
-        participantId = match ? match[0] : text.trim();
-        firstUserMessage = false;
-        console.log("Participant ID detected:", participantId);
+    function updateUserMessage(chunk) {
+      if (!userRow || !userText) {
+        beginUserMessage();
       }
+
+      userBuffer += chunk || "";
+      userText.textContent = userBuffer;
+      chatbox.scrollTop = chatbox.scrollHeight;
+    }
+
+    async function finishUserMessage() {
+      const finalText = userBuffer.trim();
+
+      if (finalText) {
+        transcript.push({
+          role: "user",
+          content: finalText,
+          timestamp: new Date().toISOString()
+        });
+
+        if (firstUserMessage) {
+          const match = finalText.match(/P?\d+/i);
+          participantId = match ? match[0] : finalText;
+          firstUserMessage = false;
+          console.log("Participant ID detected:", participantId);
+        }
+      }
+
+      userBuffer = "";
+      userRow = null;
+      userText = null;
     }
 
     function beginAssistantMessage() {
@@ -162,22 +184,18 @@
     }
 
     async function finishAssistantMessage() {
-      if (assistantBuffer.trim()) {
+      const finalText = assistantBuffer.trim();
+
+      if (finalText) {
         transcript.push({
           role: "assistant",
-          content: assistantBuffer.trim(),
+          content: finalText,
           timestamp: new Date().toISOString()
         });
 
         await saveTranscript();
       }
 
-      assistantBuffer = "";
-      assistantRow = null;
-      assistantText = null;
-    }
-
-    function resetAssistantMessage() {
       assistantBuffer = "";
       assistantRow = null;
       assistantText = null;
@@ -198,13 +216,19 @@
           throw new Error(data.error || "Failed to get session token");
         }
 
-        client = createClient(data.sessionToken, {
-          disableInputAudio: true
-        });
+        client = createClient(data.sessionToken);
 
         client.addListener(
           AnamEvent.MESSAGE_STREAM_EVENT_RECEIVED,
           async (event) => {
+            if (event.role === "user") {
+              updateUserMessage(event.content);
+
+              if (event.endOfSpeech) {
+                await finishUserMessage();
+              }
+            }
+
             if (event.role === "persona") {
               updateAssistantMessage(event.content);
 
@@ -215,47 +239,18 @@
           }
         );
 
-        await client.streamToVideoElement("avatar");
+       await client.streamToVideoElement("avatar");
 
-        const avatar = document.getElementById("avatar");
-        avatar.muted = true;
-        avatar.volume = 0;
+const avatar = document.getElementById("avatar");
+avatar.muted = true;
+avatar.volume = 0;
 
-        setStatus("Connected");
+setStatus("Connected");
       } catch (error) {
         console.error(error);
         setStatus("Error: " + error.message);
       }
     }
-
-    async function sendMessage() {
-      try {
-        if (!client) {
-          setStatus("Still connecting...");
-          return;
-        }
-
-        const text = inputEl.value.trim();
-        if (!text) return;
-
-        appendUserMessage(text);
-        inputEl.value = "";
-
-        resetAssistantMessage();
-
-        await client.sendUserMessage(text);
-      } catch (error) {
-        console.error(error);
-        setStatus("Send error: " + error.message);
-      }
-    }
-
-    inputEl.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        sendMessage();
-      }
-    });
 
     startSession();
   </script>
