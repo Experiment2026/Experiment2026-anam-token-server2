@@ -31,12 +31,21 @@
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
     }
 
+    /*
+      Creates a blank line after the first instruction.
+    */
     #status {
-      margin-bottom: 6px;
+      margin-bottom: 16px;
     }
 
+    /*
+      Entire second instruction is italic.
+
+      The larger bottom margin creates another
+      blank line before the chat area.
+    */
     #instruction {
-      margin-bottom: 10px;
+      margin-bottom: 16px;
       font-style: italic;
     }
 
@@ -109,9 +118,6 @@
 
       <h2>Chat Assistant</h2>
 
-      <!--
-        Hidden avatar used by Anam in the background.
-      -->
       <video
         id="avatar"
         autoplay
@@ -125,37 +131,22 @@
         "
       ></video>
 
-      <!--
-        Initial instruction.
-
-        "Start conversation" is bold.
-      -->
       <div id="status">
         Click the <strong>"Start conversation"</strong> button to start.
       </div>
 
-      <!--
-        Entire instruction is italic.
-
-        The button name is additionally bold.
-      -->
       <div id="instruction">
-        Once you have finished your conversation, please click the
+        Once you have finished your conversation, click the
         <strong>"Finish conversation and return to survey"</strong>
         button at the bottom to return to the survey.
       </div>
 
       <div id="chatbox">
-
         <button id="startBtn">
           Start conversation
         </button>
-
       </div>
 
-      <!--
-        Visible immediately, but initially disabled.
-      -->
       <button id="finishBtn" disabled>
         Finish conversation and return to survey
       </button>
@@ -250,9 +241,6 @@
       false;
 
 
-    /*
-      ELEMENTS
-    */
     const statusEl =
       document.getElementById(
         "status"
@@ -280,22 +268,16 @@
 
 
     /*
-      STATUS
-
-      Once the session starts, this replaces
-      the initial HTML instruction with
-      ordinary status text such as "Connected".
+      Once the session starts, the initial
+      status instruction is replaced by
+      ordinary status messages.
     */
     function setStatus(text) {
       statusEl.textContent = text;
     }
 
 
-    /*
-      DELAY
-    */
     function wait(milliseconds) {
-
       return new Promise(
         (resolve) =>
           setTimeout(
@@ -303,37 +285,26 @@
             milliseconds
           )
       );
-
     }
 
 
     /*
-      Clean superficial assistant text
-      artefacts only.
+      Clean superficial assistant text artefacts only.
     */
     function cleanDisplayText(text) {
 
       return String(text || "")
 
-        /*
-          Remove Markdown bold markers.
-        */
         .replace(
           /\*\*(.*?)\*\*/gs,
           "$1"
         )
 
-        /*
-          Remove spaces before punctuation.
-        */
         .replace(
           /\s+([.,!?;:])/g,
           "$1"
         )
 
-        /*
-          Remove spaces before apostrophes.
-        */
         .replace(
           /\s+(['’])/g,
           "$1"
@@ -359,10 +330,6 @@
       }
 
 
-      /*
-        First look for a conventional
-        alphanumeric ID.
-      */
       const directMatch =
         trimmedText.match(
           /\b[A-Za-z]+[-_]?\d+[A-Za-z0-9_-]*\b/i
@@ -386,9 +353,6 @@
       }
 
 
-      /*
-        Otherwise inspect ID-like tokens.
-      */
       const candidates =
         trimmedText.match(
           /[A-Za-z0-9_-]+/g
@@ -556,11 +520,6 @@
         });
 
 
-        /*
-          The first spoken response is
-          expected to contain the
-          participant ID.
-        */
         if (
           firstUserMessage
         ) {
@@ -688,10 +647,6 @@
         INITIAL_GREETING.length
       ) {
 
-        /*
-          Approximately 2–10 characters
-          per update.
-        */
         const chunkSize =
           Math.floor(
             Math.random() * 9
@@ -741,10 +696,6 @@
           lastCharacter === ","
         ) {
 
-          /*
-            Additional pause:
-            approximately 80–220 ms.
-          */
           delay +=
             Math.floor(
               Math.random() * 141
@@ -760,9 +711,6 @@
       }
 
 
-      /*
-        Store exact greeting in transcript.
-      */
       transcript.push({
 
         role:
@@ -783,10 +731,6 @@
       );
 
 
-      /*
-        Clear temporary assistant
-        display state.
-      */
       assistantBuffer = "";
 
       assistantRow = null;
@@ -971,9 +915,6 @@
       }
 
 
-      /*
-        Prevent duplicate finalization.
-      */
       if (
         message.id &&
         finalizedPersonaMessageIds
@@ -993,10 +934,6 @@
         ).trim();
 
 
-      /*
-        Replace streamed text with
-        finalized Anam message.
-      */
       if (
         assistantRow &&
         assistantText &&
@@ -1060,10 +997,6 @@
       }
 
 
-      /*
-        Autosave after each completed
-        assistant response.
-      */
       try {
 
         await saveTranscript();
@@ -1133,9 +1066,6 @@
         null;
 
 
-      /*
-        Find newest persona message.
-      */
       for (
         let i =
           messages.length - 1;
@@ -1171,12 +1101,8 @@
 
 
       /*
-        First persona message =
-        Anam's imperfect textual
-        initial greeting.
-
-        Ignore it because we display
-        the exact greeting locally.
+        Ignore Anam's imperfect
+        first textual greeting.
       */
       if (
         !initialAnamGreetingCompleted
@@ -1208,10 +1134,6 @@
       }
 
 
-      /*
-        Ignore messages that have
-        already been finalized.
-      */
       if (
         latestPersonaMessage.id &&
         finalizedPersonaMessageIds
@@ -1264,12 +1186,6 @@
           });
 
 
-      /*
-        Permission check complete.
-
-        Anam establishes its own
-        microphone stream afterwards.
-      */
       micStream
         .getTracks()
         .forEach(
@@ -1432,10 +1348,6 @@
               "persona"
             ) {
 
-              /*
-                Ignore Anam's streamed
-                initial greeting.
-              */
               if (
                 !initialAnamGreetingCompleted
               ) {
@@ -1501,10 +1413,6 @@
           );
 
 
-        /*
-          Text-interface condition:
-          avatar remains muted.
-        */
         avatar.muted =
           true;
 
@@ -1567,15 +1475,9 @@
             "Starting...";
 
 
-          /*
-            Establish Anam session.
-          */
           await startSession();
 
 
-          /*
-            Reveal chat area.
-          */
           startBtn.style.display =
             "none";
 
@@ -1593,8 +1495,7 @@
 
           /*
             Conversation has successfully
-            started, so enable the
-            Finish button.
+            started, so enable Finish.
           */
           finishBtn.disabled =
             false;
@@ -1631,10 +1532,6 @@
             "black";
 
 
-          /*
-            Keep Finish disabled if
-            conversation startup fails.
-          */
           finishBtn.disabled =
             true;
 
@@ -1671,9 +1568,6 @@
 
         try {
 
-          /*
-            Prevent repeated clicks.
-          */
           finishBtn.disabled =
             true;
 
@@ -1684,8 +1578,7 @@
 
           /*
             Perform one final transcript
-            save if a participant ID
-            has been captured.
+            save if participant ID exists.
           */
           if (participantId) {
 
@@ -1704,10 +1597,6 @@
           );
 
 
-          /*
-            Return to the previous page
-            in this browser tab.
-          */
           window.history.back();
 
 
