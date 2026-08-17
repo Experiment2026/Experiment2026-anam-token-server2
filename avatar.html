@@ -32,7 +32,7 @@
     }
 
     /*
-      Creates a blank line after the first instruction.
+      Blank line after the first instruction.
     */
     #status {
       margin-bottom: 16px;
@@ -41,7 +41,7 @@
     /*
       Entire second instruction is italic.
 
-      The larger bottom margin creates another
+      The bottom margin creates another
       blank line before the chat area.
     */
     #instruction {
@@ -268,12 +268,19 @@
 
 
     /*
-      Once the session starts, the initial
-      status instruction is replaced by
-      ordinary status messages.
+      Normal status text.
     */
     function setStatus(text) {
       statusEl.textContent = text;
+    }
+
+
+    /*
+      Connected status shown in bold.
+    */
+    function setConnectedStatus() {
+      statusEl.innerHTML =
+        "<strong>Connected</strong>";
     }
 
 
@@ -289,7 +296,8 @@
 
 
     /*
-      Clean superficial assistant text artefacts only.
+      Clean superficial assistant
+      text artefacts only.
     */
     function cleanDisplayText(text) {
 
@@ -1420,9 +1428,11 @@
           0;
 
 
-        setStatus(
-          "Connected"
-        );
+        /*
+          Bold Connected status only
+          once the session is actually ready.
+        */
+        setConnectedStatus();
 
       } catch (
         error
@@ -1501,9 +1511,10 @@
             false;
 
 
-          setStatus(
-            "Connected"
-          );
+          /*
+            Keep Connected bold.
+          */
+          setConnectedStatus();
 
 
         } catch (
