@@ -129,26 +129,55 @@
     const API_BASE_URL =
       "https://anam-token-server-1.onrender.com";
 
+    /*
+      Exact greeting Sophie says aloud.
+
+      We display this locally because Anam's textual
+      version of the first greeting currently omits "Hi".
+    */
+    const INITIAL_GREETING =
+      "Hi there, welcome to FastFlights' help centre. My name is Sophie and I am here to assist you. Before we get started, could you please provide the participant number that was given to you prior to opening this page?";
+
     let client = null;
 
     let transcript = [];
 
     /*
-      The participant receives their ID in Qualtrics.
+      Participant ID handling.
 
-      The chatbot asks for the ID in its greeting, and the
-      participant speaks it as their first response.
+      The participant speaks the ID as their first response.
     */
     let participantId = null;
     let firstUserMessage = true;
 
+    /*
+      User speech-display state.
+    */
     let userBuffer = "";
     let userRow = null;
     let userText = null;
 
+    /*
+      Assistant display state.
+    */
     let assistantBuffer = "";
     let assistantRow = null;
     let assistantText = null;
+    let activePersonaMessageId = null;
+
+    /*
+      Prevent duplicate finalized Anam persona messages.
+    */
+    const finalizedPersonaMessageIds =
+      new Set();
+
+    /*
+      The first Anam persona message is the greeting.
+
+      We display the exact greeting ourselves, so
+      Anam's corresponding textual version is ignored.
+    */
+    let initialAnamGreetingCompleted = false;
 
     const statusEl =
       document.getElementById("status");
@@ -162,22 +191,60 @@
     const avatar =
       document.getElementById("avatar");
 
+
     function setStatus(text) {
       statusEl.textContent = text;
     }
 
-    /*
-      Attempts to extract the participant ID from the first
-      transcribed user response.
 
-      This supports responses such as:
+    /*
+      Simple delay helper used for the initial
+      greeting animation.
+    */
+    function wait(milliseconds) {
+      return new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            milliseconds
+          )
+      );
+    }
+
+
+    /*
+      Clean superficial assistant-display artefacts only.
+
+      No rewriting or paraphrasing takes place.
+    */
+    function cleanDisplayText(text) {
+      return String(text || "")
+        /*
+          Remove Markdown bold markers.
+        */
+        .replace(/\*\*(.*?)\*\*/gs, "$1")
+
+        /*
+          Remove spaces before punctuation.
+        */
+        .replace(/\s+([.,!?;:])/g, "$1")
+
+        /*
+          Remove spaces before apostrophes.
+        */
+        .replace(/\s+(['’])/g, "$1");
+    }
+
+
+    /*
+      Attempts to extract the participant ID from
+      the first transcribed user response.
+
+      Supports responses such as:
 
       P014
       P zero one four
       My participant ID is P014
-
-      Standard letter-number IDs such as P014 are the most reliable
-      for speech recognition.
     */
     function extractParticipantId(text) {
       const trimmedText =
@@ -188,8 +255,8 @@
       }
 
       /*
-        First, look for a conventional ID containing letters and
-        numbers, such as P014 or ABC123.
+        First look for a conventional ID containing
+        letters and numbers, such as P014 or ABC123.
       */
       const directMatch =
         trimmedText.match(
@@ -206,7 +273,7 @@
       }
 
       /*
-        Otherwise, inspect ID-like tokens in the transcript.
+        Otherwise inspect ID-like tokens.
       */
       const candidates =
         trimmedText.match(
@@ -247,6 +314,11 @@
       return cleanedId || null;
     }
 
+
+    /*
+      USER SPEECH DISPLAY
+    */
+
     function beginUserMessage() {
       userRow =
         document.createElement("p");
@@ -254,12 +326,15 @@
       const label =
         document.createElement("b");
 
-      label.textContent = "You: ";
+      label.textContent =
+        "You: ";
 
       userText =
         document.createElement("span");
 
       userText.textContent = "";
+      userText.style.whiteSpace =
+        "pre-wrap";
 
       userRow.appendChild(label);
       userRow.appendChild(userText);
@@ -270,12 +345,17 @@
         chatbox.scrollHeight;
     }
 
+
     function updateUserMessage(chunk) {
-      if (!userRow || !userText) {
+      if (
+        !userRow ||
+        !userText
+      ) {
         beginUserMessage();
       }
 
-      userBuffer += chunk || "";
+      userBuffer +=
+        chunk || "";
 
       userText.textContent =
         userBuffer;
@@ -283,6 +363,7 @@
       chatbox.scrollTop =
         chatbox.scrollHeight;
     }
+
 
     async function finishUserMessage() {
       const finalText =
@@ -297,8 +378,9 @@
         });
 
         /*
-          The first completed spoken user message is expected to
-          contain the Qualtrics participant ID.
+          The first completed spoken user message
+          is expected to contain the Qualtrics
+          participant ID.
         */
         if (firstUserMessage) {
           participantId =
@@ -306,7 +388,8 @@
               finalText
             );
 
-          firstUserMessage = false;
+          firstUserMessage =
+            false;
 
           if (participantId) {
             console.log(
@@ -326,7 +409,14 @@
       userText = null;
     }
 
-    function beginAssistantMessage() {
+
+    /*
+      ASSISTANT DISPLAY
+    */
+
+    function beginAssistantMessage(
+      messageId = null
+    ) {
       assistantRow =
         document.createElement("p");
 
@@ -341,8 +431,10 @@
 
       assistantText.textContent = "";
 
-      assistantRow.appendChild(label);
+      assistantText.style.whiteSpace =
+        "pre-wrap";
 
+      assistantRow.appendChild(label);
       assistantRow.appendChild(
         assistantText
       );
@@ -351,33 +443,169 @@
         assistantRow
       );
 
+      activePersonaMessageId =
+        messageId;
+
       chatbox.scrollTop =
         chatbox.scrollHeight;
     }
 
-    function updateAssistantMessage(
-      chunk
-    ) {
+
+    /*
+      Display the exact known initial greeting.
+
+      It appears in uneven chunks with slower,
+      irregular timing to resemble the normal
+      Anam streaming behaviour.
+    */
+    async function displayInitialGreeting() {
+      beginAssistantMessage();
+
+      let position = 0;
+
+      while (
+        position <
+        INITIAL_GREETING.length
+      ) {
+        /*
+          Reveal approximately 2–10 characters
+          with each update.
+        */
+        const chunkSize =
+          Math.floor(
+            Math.random() * 9
+          ) + 2;
+
+        position =
+          Math.min(
+            position + chunkSize,
+            INITIAL_GREETING.length
+          );
+
+        assistantText.textContent =
+          INITIAL_GREETING.slice(
+            0,
+            position
+          );
+
+        chatbox.scrollTop =
+          chatbox.scrollHeight;
+
+        /*
+          Irregular delay:
+          approximately 90–230 ms.
+        */
+        let delay =
+          Math.floor(
+            Math.random() * 141
+          ) + 90;
+
+        /*
+          Add an additional pause if the current
+          chunk happens to end on punctuation.
+
+          Additional pause:
+          approximately 80–220 ms.
+        */
+        const lastCharacter =
+          INITIAL_GREETING[
+            position - 1
+          ];
+
+        if (
+          lastCharacter === "." ||
+          lastCharacter === "?" ||
+          lastCharacter === ","
+        ) {
+          delay +=
+            Math.floor(
+              Math.random() * 141
+            ) + 80;
+        }
+
+        await wait(delay);
+      }
+
+      /*
+        Store the complete exact greeting in the
+        research transcript.
+
+        It cannot yet be saved to Render because
+        the participant has not spoken their ID.
+      */
+      transcript.push({
+        role: "assistant",
+        content:
+          INITIAL_GREETING,
+        timestamp:
+          new Date().toISOString()
+      });
+
+      console.log(
+        "Initial greeting displayed progressively:",
+        INITIAL_GREETING
+      );
+
+      /*
+        Clear temporary assistant-display state only.
+        The greeting itself remains visible.
+      */
+      assistantBuffer = "";
+      assistantRow = null;
+      assistantText = null;
+      activePersonaMessageId = null;
+    }
+
+
+    /*
+      Display normal Anam persona responses progressively.
+    */
+    function updateAssistantMessage(event) {
       if (
         !assistantRow ||
-        !assistantText
+        !assistantText ||
+        (
+          event.id &&
+          activePersonaMessageId &&
+          event.id !==
+            activePersonaMessageId
+        )
       ) {
-        beginAssistantMessage();
+        assistantBuffer = "";
+
+        beginAssistantMessage(
+          event.id || null
+        );
+      }
+
+      if (
+        !activePersonaMessageId &&
+        event.id
+      ) {
+        activePersonaMessageId =
+          event.id;
       }
 
       assistantBuffer +=
-        chunk || "";
+        event.content || "";
 
       assistantText.textContent =
-        assistantBuffer;
+        cleanDisplayText(
+          assistantBuffer
+        );
 
       chatbox.scrollTop =
         chatbox.scrollHeight;
     }
 
+
+    /*
+      TRANSCRIPT SAVING
+    */
+
     async function saveTranscript() {
       /*
-        Do not save the transcript until the participant ID
+        Do not save until the participant ID
         has been captured.
       */
       if (!participantId) {
@@ -451,29 +679,197 @@
       }
     }
 
-    async function finishAssistantMessage() {
-      const finalText =
-        assistantBuffer.trim();
 
-      if (finalText) {
-        transcript.push({
-          role: "assistant",
-          content: finalText,
-          timestamp:
-            new Date().toISOString()
-        });
-
-        /*
-          Save the complete transcript after each completed
-          assistant response.
-        */
-        await saveTranscript();
+    /*
+      Finalize normal assistant responses using
+      Anam's complete MESSAGE_HISTORY_UPDATED data.
+    */
+    async function finalizeAssistantFromHistory(
+      message
+    ) {
+      if (
+        !message ||
+        message.role !== "persona" ||
+        !message.content
+      ) {
+        return;
       }
+
+      /*
+        Prevent duplicate processing.
+      */
+      if (
+        message.id &&
+        finalizedPersonaMessageIds.has(
+          message.id
+        )
+      ) {
+        return;
+      }
+
+      const finalContent =
+        String(
+          message.content
+        ).trim();
+
+      /*
+        Replace the temporary streamed transcription
+        with Anam's finalized message.
+      */
+      if (
+        assistantRow &&
+        assistantText &&
+        (
+          !message.id ||
+          !activePersonaMessageId ||
+          message.id ===
+            activePersonaMessageId
+        )
+      ) {
+        assistantText.textContent =
+          cleanDisplayText(
+            finalContent
+          );
+      } else {
+        assistantBuffer = "";
+
+        beginAssistantMessage(
+          message.id || null
+        );
+
+        assistantText.textContent =
+          cleanDisplayText(
+            finalContent
+          );
+      }
+
+      chatbox.scrollTop =
+        chatbox.scrollHeight;
+
+      /*
+        Save the finalized Anam response.
+      */
+      transcript.push({
+        role: "assistant",
+        content:
+          finalContent,
+        timestamp:
+          new Date().toISOString()
+      });
+
+      if (message.id) {
+        finalizedPersonaMessageIds.add(
+          message.id
+        );
+      }
+
+      /*
+        Save the complete transcript after
+        each completed assistant response.
+      */
+      await saveTranscript();
 
       assistantBuffer = "";
       assistantRow = null;
       assistantText = null;
+      activePersonaMessageId = null;
     }
+
+
+    /*
+      Process Anam's complete message history.
+    */
+    async function handleMessageHistoryUpdated(
+      messages
+    ) {
+      console.log(
+        "ANAM MESSAGE HISTORY UPDATED:",
+        messages
+      );
+
+      if (
+        !Array.isArray(messages) ||
+        messages.length === 0
+      ) {
+        return;
+      }
+
+      let latestPersonaMessage =
+        null;
+
+      /*
+        Find the newest persona message.
+      */
+      for (
+        let i =
+          messages.length - 1;
+        i >= 0;
+        i--
+      ) {
+        if (
+          messages[i]?.role ===
+          "persona"
+        ) {
+          latestPersonaMessage =
+            messages[i];
+
+          break;
+        }
+      }
+
+      if (!latestPersonaMessage) {
+        return;
+      }
+
+      /*
+        FIRST PERSONA MESSAGE =
+        ANAM'S INITIAL GREETING.
+
+        Ignore its textual representation because
+        we display the exact greeting locally.
+      */
+      if (
+        !initialAnamGreetingCompleted
+      ) {
+        initialAnamGreetingCompleted =
+          true;
+
+        if (
+          latestPersonaMessage.id
+        ) {
+          finalizedPersonaMessageIds.add(
+            latestPersonaMessage.id
+          );
+        }
+
+        console.log(
+          "Initial Anam greeting ignored."
+        );
+
+        return;
+      }
+
+      /*
+        Ignore messages already finalized.
+      */
+      if (
+        latestPersonaMessage.id &&
+        finalizedPersonaMessageIds.has(
+          latestPersonaMessage.id
+        )
+      ) {
+        return;
+      }
+
+      await finalizeAssistantFromHistory(
+        latestPersonaMessage
+      );
+    }
+
+
+    /*
+      MICROPHONE ACCESS
+    */
 
     async function requestMicrophoneAccess() {
       if (
@@ -493,15 +889,23 @@
           });
 
       /*
-        The permission check is complete. Anam will establish
-        its own audio stream when the session starts.
+        Permission check complete.
+
+        Anam establishes its own audio stream
+        once the session begins.
       */
       micStream
         .getTracks()
         .forEach(
-          (track) => track.stop()
+          (track) =>
+            track.stop()
         );
     }
+
+
+    /*
+      SESSION START
+    */
 
     async function startSession() {
       try {
@@ -559,46 +963,111 @@
         }
 
         /*
-          No disableInputAudio setting is used because this
-          condition requires speech input.
+          No disableInputAudio setting because
+          this condition requires speech input.
         */
-        client = createClient(
-          data.sessionToken
-        );
+        client =
+          createClient(
+            data.sessionToken
+          );
 
+
+        /*
+          REAL-TIME MESSAGE STREAM.
+
+          User events:
+          display and store spoken participant input.
+
+          Persona events:
+          display Sophie progressively, except
+          for the first greeting.
+        */
         client.addListener(
           AnamEvent
             .MESSAGE_STREAM_EVENT_RECEIVED,
 
           async (event) => {
+            console.log(
+              "ANAM STREAM EVENT:",
+              event
+            );
+
+            /*
+              USER SPEECH
+            */
             if (
-              event.role === "user"
+              event.role ===
+              "user"
             ) {
               updateUserMessage(
                 event.content
               );
 
-              if (event.endOfSpeech) {
+              if (
+                event.endOfSpeech
+              ) {
                 await finishUserMessage();
               }
+
+              return;
             }
 
-            if (
-              event.role === "persona"
-            ) {
-              updateAssistantMessage(
-                event.content
-              );
 
-              if (event.endOfSpeech) {
-                await finishAssistantMessage();
+            /*
+              SOPHIE / PERSONA
+            */
+            if (
+              event.role ===
+              "persona"
+            ) {
+              /*
+                Ignore streamed text belonging to
+                the initial Anam greeting.
+
+                The correct greeting is displayed
+                locally instead.
+              */
+              if (
+                !initialAnamGreetingCompleted
+              ) {
+                return;
               }
+
+              updateAssistantMessage(
+                event
+              );
             }
           }
         );
 
+
         /*
-          The Anam SDK expects the video element ID.
+          COMPLETE ANAM MESSAGE HISTORY.
+
+          Used as the authoritative source for
+          completed persona responses.
+        */
+        client.addListener(
+          AnamEvent
+            .MESSAGE_HISTORY_UPDATED,
+
+          async (messages) => {
+            try {
+              await handleMessageHistoryUpdated(
+                messages
+              );
+            } catch (error) {
+              console.error(
+                "Message-history processing error:",
+                error
+              );
+            }
+          }
+        );
+
+
+        /*
+          Start the Anam stream.
         */
         await client
           .streamToVideoElement(
@@ -606,8 +1075,8 @@
           );
 
         /*
-          The assistant is represented as text in this condition,
-          so the hidden avatar is muted.
+          Assistant represented as text in this
+          condition, so hidden avatar remains muted.
         */
         avatar.muted = true;
         avatar.volume = 0;
@@ -633,6 +1102,11 @@
       }
     }
 
+
+    /*
+      START BUTTON
+    */
+
     startBtn.addEventListener(
       "click",
       async () => {
@@ -643,13 +1117,40 @@
           startBtn.textContent =
             "Starting...";
 
+          /*
+            Request microphone access and
+            establish the Anam session first.
+          */
           await startSession();
 
+          /*
+            Reveal the chat interface before
+            displaying the local greeting.
+          */
           startBtn.style.display =
             "none";
 
           chatbox.style.background =
             "white";
+
+          /*
+            Display Sophie's exact greeting using
+            the same irregular, slower presentation
+            used in Condition 1.
+          */
+          await displayInitialGreeting();
+
+          /*
+            Participant can now speak their
+            participant ID.
+
+            No text-input field exists in this
+            speech-input condition.
+          */
+          setStatus(
+            "Connected"
+          );
+
         } catch (error) {
           console.error(
             "Full start-session error:",
@@ -678,6 +1179,7 @@
         }
       }
     );
+
 
     setStatus(
       "Click the button to start."
