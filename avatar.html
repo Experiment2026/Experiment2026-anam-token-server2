@@ -73,6 +73,28 @@
       cursor: wait;
       opacity: 0.8;
     }
+
+    #finishBtn {
+      display: none;
+      margin-top: 4px;
+      padding: 12px 20px;
+
+      font-size: 16px;
+      font-weight: bold;
+
+      border: none;
+      border-radius: 8px;
+
+      background: #222;
+      color: white;
+
+      cursor: pointer;
+    }
+
+    #finishBtn:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
   </style>
 </head>
 
@@ -107,6 +129,10 @@
           Start conversation
         </button>
       </div>
+
+      <button id="finishBtn">
+        Finish conversation and return to survey
+      </button>
     </div>
   </div>
 
@@ -144,8 +170,6 @@
 
     /*
       Participant ID handling.
-
-      The participant speaks the ID as their first response.
     */
     let participantId = null;
     let firstUserMessage = true;
@@ -188,6 +212,9 @@
     const startBtn =
       document.getElementById("startBtn");
 
+    const finishBtn =
+      document.getElementById("finishBtn");
+
     const avatar =
       document.getElementById("avatar");
 
@@ -198,8 +225,7 @@
 
 
     /*
-      Simple delay helper used for the initial
-      greeting animation.
+      Simple delay helper.
     */
     function wait(milliseconds) {
       return new Promise(
@@ -214,8 +240,6 @@
 
     /*
       Clean superficial assistant-display artefacts only.
-
-      No rewriting or paraphrasing takes place.
     */
     function cleanDisplayText(text) {
       return String(text || "")
@@ -237,14 +261,8 @@
 
 
     /*
-      Attempts to extract the participant ID from
-      the first transcribed user response.
-
-      Supports responses such as:
-
-      P014
-      P zero one four
-      My participant ID is P014
+      Extract participant ID from the first
+      transcribed user response.
     */
     function extractParticipantId(text) {
       const trimmedText =
@@ -333,6 +351,7 @@
         document.createElement("span");
 
       userText.textContent = "";
+
       userText.style.whiteSpace =
         "pre-wrap";
 
@@ -378,9 +397,8 @@
         });
 
         /*
-          The first completed spoken user message
-          is expected to contain the Qualtrics
-          participant ID.
+          The first completed spoken response
+          contains the Qualtrics participant ID.
         */
         if (firstUserMessage) {
           participantId =
@@ -454,9 +472,8 @@
     /*
       Display the exact known initial greeting.
 
-      It appears in uneven chunks with slower,
-      irregular timing to resemble the normal
-      Anam streaming behaviour.
+      The text appears in uneven chunks with
+      intentionally irregular, slower timing.
     */
     async function displayInitialGreeting() {
       beginAssistantMessage();
@@ -469,7 +486,7 @@
       ) {
         /*
           Reveal approximately 2–10 characters
-          with each update.
+          per update.
         */
         const chunkSize =
           Math.floor(
@@ -501,8 +518,8 @@
           ) + 90;
 
         /*
-          Add an additional pause if the current
-          chunk happens to end on punctuation.
+          Add a longer pause when a chunk happens
+          to end on punctuation.
 
           Additional pause:
           approximately 80–220 ms.
@@ -530,8 +547,8 @@
         Store the complete exact greeting in the
         research transcript.
 
-        It cannot yet be saved to Render because
-        the participant has not spoken their ID.
+        It is not yet saved to Render because the
+        participant has not supplied their ID.
       */
       transcript.push({
         role: "assistant",
@@ -546,10 +563,6 @@
         INITIAL_GREETING
       );
 
-      /*
-        Clear temporary assistant-display state only.
-        The greeting itself remains visible.
-      */
       assistantBuffer = "";
       assistantRow = null;
       assistantText = null;
@@ -604,10 +617,6 @@
     */
 
     async function saveTranscript() {
-      /*
-        Do not save until the participant ID
-        has been captured.
-      */
       if (!participantId) {
         console.warn(
           "Transcript not saved because no participant ID has been detected."
@@ -616,73 +625,58 @@
         return;
       }
 
+      const response =
+        await fetch(
+          `${API_BASE_URL}/api/save-transcript`,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json"
+            },
+
+            body: JSON.stringify({
+              participantId:
+                participantId,
+
+              condition:
+                CONDITION,
+
+              transcript:
+                transcript
+            })
+          }
+        );
+
+      let data;
+
       try {
-        const response =
-          await fetch(
-            `${API_BASE_URL}/api/save-transcript`,
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json"
-              },
-
-              body: JSON.stringify({
-                participantId:
-                  participantId,
-
-                condition:
-                  CONDITION,
-
-                transcript:
-                  transcript
-              })
-            }
-          );
-
-        let data;
-
-        try {
-          data =
-            await response.json();
-        } catch (jsonError) {
-          throw new Error(
-            "The transcript endpoint returned an invalid response."
-          );
-        }
-
-        if (!response.ok) {
-          throw new Error(
-            data.error ||
-              "Transcript save failed."
-          );
-        }
-
-        console.log(
-          "Transcript saved:",
-          data
-        );
-      } catch (error) {
-        console.error(
-          "Transcript autosave error:",
-          error
-        );
-
-        setStatus(
-          "Connected, but transcript saving failed: " +
-            (
-              error?.message ||
-              String(error)
-            )
+        data =
+          await response.json();
+      } catch (jsonError) {
+        throw new Error(
+          "The transcript endpoint returned an invalid response."
         );
       }
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Transcript save failed."
+        );
+      }
+
+      console.log(
+        "Transcript saved:",
+        data
+      );
     }
 
 
     /*
       Finalize normal assistant responses using
-      Anam's complete MESSAGE_HISTORY_UPDATED data.
+      Anam's complete message history.
     */
     async function finalizeAssistantFromHistory(
       message
@@ -695,9 +689,6 @@
         return;
       }
 
-      /*
-        Prevent duplicate processing.
-      */
       if (
         message.id &&
         finalizedPersonaMessageIds.has(
@@ -713,8 +704,8 @@
         ).trim();
 
       /*
-        Replace the temporary streamed transcription
-        with Anam's finalized message.
+        Replace streamed output with the finalized
+        Anam message.
       */
       if (
         assistantRow &&
@@ -746,9 +737,6 @@
       chatbox.scrollTop =
         chatbox.scrollHeight;
 
-      /*
-        Save the finalized Anam response.
-      */
       transcript.push({
         role: "assistant",
         content:
@@ -764,10 +752,25 @@
       }
 
       /*
-        Save the complete transcript after
-        each completed assistant response.
+        Autosave after each complete
+        assistant response.
       */
-      await saveTranscript();
+      try {
+        await saveTranscript();
+      } catch (error) {
+        console.error(
+          "Transcript autosave error:",
+          error
+        );
+
+        setStatus(
+          "Connected, but transcript saving failed: " +
+            (
+              error?.message ||
+              String(error)
+            )
+        );
+      }
 
       assistantBuffer = "";
       assistantRow = null;
@@ -797,9 +800,6 @@
       let latestPersonaMessage =
         null;
 
-      /*
-        Find the newest persona message.
-      */
       for (
         let i =
           messages.length - 1;
@@ -822,11 +822,11 @@
       }
 
       /*
-        FIRST PERSONA MESSAGE =
-        ANAM'S INITIAL GREETING.
+        First persona message is Anam's imperfect
+        text version of the greeting.
 
-        Ignore its textual representation because
-        we display the exact greeting locally.
+        Ignore it because the exact greeting is
+        displayed locally.
       */
       if (
         !initialAnamGreetingCompleted
@@ -849,9 +849,6 @@
         return;
       }
 
-      /*
-        Ignore messages already finalized.
-      */
       if (
         latestPersonaMessage.id &&
         finalizedPersonaMessageIds.has(
@@ -892,7 +889,7 @@
         Permission check complete.
 
         Anam establishes its own audio stream
-        once the session begins.
+        when the session starts.
       */
       micStream
         .getTracks()
@@ -973,14 +970,7 @@
 
 
         /*
-          REAL-TIME MESSAGE STREAM.
-
-          User events:
-          display and store spoken participant input.
-
-          Persona events:
-          display Sophie progressively, except
-          for the first greeting.
+          REAL-TIME MESSAGE STREAM
         */
         client.addListener(
           AnamEvent
@@ -1023,9 +1013,6 @@
               /*
                 Ignore streamed text belonging to
                 the initial Anam greeting.
-
-                The correct greeting is displayed
-                locally instead.
               */
               if (
                 !initialAnamGreetingCompleted
@@ -1042,10 +1029,7 @@
 
 
         /*
-          COMPLETE ANAM MESSAGE HISTORY.
-
-          Used as the authoritative source for
-          completed persona responses.
+          COMPLETE ANAM MESSAGE HISTORY
         */
         client.addListener(
           AnamEvent
@@ -1067,23 +1051,20 @@
 
 
         /*
-          Start the Anam stream.
+          Start Anam.
         */
         await client
           .streamToVideoElement(
             "avatar"
           );
 
-        /*
-          Assistant represented as text in this
-          condition, so hidden avatar remains muted.
-        */
         avatar.muted = true;
         avatar.volume = 0;
 
         setStatus(
           "Connected"
         );
+
       } catch (error) {
         console.error(
           "Session start error:",
@@ -1119,13 +1100,12 @@
 
           /*
             Request microphone access and
-            establish the Anam session first.
+            establish the Anam session.
           */
           await startSession();
 
           /*
-            Reveal the chat interface before
-            displaying the local greeting.
+            Reveal the chat interface first.
           */
           startBtn.style.display =
             "none";
@@ -1141,14 +1121,13 @@
           await displayInitialGreeting();
 
           /*
-            Participant can now speak their
-            participant ID.
-
-            No text-input field exists in this
-            speech-input condition.
+            Now show the finish control and instruction.
           */
+          finishBtn.style.display =
+            "inline-block";
+
           setStatus(
-            "Connected"
+            "Connected. Once you have finished your conversation, please click the button below to return to the survey."
           );
 
         } catch (error) {
@@ -1169,12 +1148,77 @@
           chatbox.style.background =
             "black";
 
+          finishBtn.style.display =
+            "none";
+
           setStatus(
             "Failed to start session: " +
               (
                 error?.message ||
                 String(error)
               )
+          );
+        }
+      }
+    );
+
+
+    /*
+      FINISH CONVERSATION BUTTON
+    */
+
+    finishBtn.addEventListener(
+      "click",
+      async () => {
+        try {
+          /*
+            Prevent repeated clicks while the final
+            transcript save is taking place.
+          */
+          finishBtn.disabled =
+            true;
+
+          finishBtn.textContent =
+            "Finishing...";
+
+          setStatus(
+            "Saving your conversation..."
+          );
+
+          /*
+            If Anam has already produced a complete
+            participant utterance or persona message,
+            these should already have been autosaved.
+
+            This performs one final full transcript save
+            immediately before returning to the survey.
+          */
+          await saveTranscript();
+
+          setStatus(
+            "Returning to the survey..."
+          );
+
+          /*
+            Return to the previous page in this tab,
+            which should be the Qualtrics survey.
+          */
+          window.history.back();
+
+        } catch (error) {
+          console.error(
+            "Finish-conversation error:",
+            error
+          );
+
+          finishBtn.disabled =
+            false;
+
+          finishBtn.textContent =
+            "Finish conversation and return to survey";
+
+          setStatus(
+            "The conversation could not be saved. Please try the Finish button again."
           );
         }
       }
