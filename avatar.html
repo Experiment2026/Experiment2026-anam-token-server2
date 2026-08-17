@@ -32,7 +32,12 @@
     }
 
     #status {
+      margin-bottom: 6px;
+    }
+
+    #instruction {
       margin-bottom: 10px;
+      font-style: italic;
     }
 
     #chatbox {
@@ -122,6 +127,10 @@
 
       <div id="status">
         Click the button to start.
+      </div>
+
+      <div id="instruction">
+        Once you have finished your conversation, please click the button below to return to the survey.
       </div>
 
       <div id="chatbox">
@@ -243,19 +252,8 @@
     */
     function cleanDisplayText(text) {
       return String(text || "")
-        /*
-          Remove Markdown bold markers.
-        */
         .replace(/\*\*(.*?)\*\*/gs, "$1")
-
-        /*
-          Remove spaces before punctuation.
-        */
         .replace(/\s+([.,!?;:])/g, "$1")
-
-        /*
-          Remove spaces before apostrophes.
-        */
         .replace(/\s+(['’])/g, "$1");
     }
 
@@ -272,10 +270,6 @@
         return null;
       }
 
-      /*
-        First look for a conventional ID containing
-        letters and numbers, such as P014 or ABC123.
-      */
       const directMatch =
         trimmedText.match(
           /\b[A-Za-z]+[-_]?\d+[A-Za-z0-9_-]*\b/i
@@ -290,9 +284,6 @@
           .slice(0, 100);
       }
 
-      /*
-        Otherwise inspect ID-like tokens.
-      */
       const candidates =
         trimmedText.match(
           /[A-Za-z0-9_-]+/g
@@ -351,7 +342,6 @@
         document.createElement("span");
 
       userText.textContent = "";
-
       userText.style.whiteSpace =
         "pre-wrap";
 
@@ -396,10 +386,6 @@
             new Date().toISOString()
         });
 
-        /*
-          The first completed spoken response
-          contains the Qualtrics participant ID.
-        */
         if (firstUserMessage) {
           participantId =
             extractParticipantId(
@@ -448,7 +434,6 @@
         document.createElement("span");
 
       assistantText.textContent = "";
-
       assistantText.style.whiteSpace =
         "pre-wrap";
 
@@ -472,8 +457,9 @@
     /*
       Display the exact known initial greeting.
 
-      The text appears in uneven chunks with
-      intentionally irregular, slower timing.
+      It appears in uneven chunks with slower,
+      irregular timing to resemble normal Anam
+      streaming behaviour.
     */
     async function displayInitialGreeting() {
       beginAssistantMessage();
@@ -518,10 +504,8 @@
           ) + 90;
 
         /*
-          Add a longer pause when a chunk happens
-          to end on punctuation.
-
-          Additional pause:
+          Additional pause when the current
+          chunk ends on punctuation:
           approximately 80–220 ms.
         */
         const lastCharacter =
@@ -543,13 +527,6 @@
         await wait(delay);
       }
 
-      /*
-        Store the complete exact greeting in the
-        research transcript.
-
-        It is not yet saved to Render because the
-        participant has not supplied their ID.
-      */
       transcript.push({
         role: "assistant",
         content:
@@ -703,10 +680,6 @@
           message.content
         ).trim();
 
-      /*
-        Replace streamed output with the finalized
-        Anam message.
-      */
       if (
         assistantRow &&
         assistantText &&
@@ -751,10 +724,6 @@
         );
       }
 
-      /*
-        Autosave after each complete
-        assistant response.
-      */
       try {
         await saveTranscript();
       } catch (error) {
@@ -887,7 +856,6 @@
 
       /*
         Permission check complete.
-
         Anam establishes its own audio stream
         when the session starts.
       */
@@ -949,19 +917,14 @@
         }
 
         if (!data.sessionToken) {
-          console.error(
-            "Session-token data:",
-            data
-          );
-
           throw new Error(
             "No session token was returned by the backend."
           );
         }
 
         /*
-          No disableInputAudio setting because
-          this condition requires speech input.
+          Speech-input condition:
+          do not disable microphone input.
         */
         client =
           createClient(
@@ -1011,8 +974,8 @@
               "persona"
             ) {
               /*
-                Ignore streamed text belonging to
-                the initial Anam greeting.
+                Ignore Anam's textual version
+                of the initial greeting.
               */
               if (
                 !initialAnamGreetingCompleted
@@ -1098,10 +1061,6 @@
           startBtn.textContent =
             "Starting...";
 
-          /*
-            Request microphone access and
-            establish the Anam session.
-          */
           await startSession();
 
           /*
@@ -1114,20 +1073,22 @@
             "white";
 
           /*
-            Display Sophie's exact greeting using
-            the same irregular, slower presentation
-            used in Condition 1.
+            Display Sophie's exact initial greeting.
           */
           await displayInitialGreeting();
 
           /*
-            Now show the finish control and instruction.
+            Show the Finish button once the
+            conversation is ready.
+
+            The italic instruction has already been
+            visible since the page first loaded.
           */
           finishBtn.style.display =
             "inline-block";
 
           setStatus(
-            "Connected. Once you have finished your conversation, please click the button below to return to the survey."
+            "Connected"
           );
 
         } catch (error) {
@@ -1171,10 +1132,6 @@
       "click",
       async () => {
         try {
-          /*
-            Prevent repeated clicks while the final
-            transcript save is taking place.
-          */
           finishBtn.disabled =
             true;
 
@@ -1186,12 +1143,7 @@
           );
 
           /*
-            If Anam has already produced a complete
-            participant utterance or persona message,
-            these should already have been autosaved.
-
-            This performs one final full transcript save
-            immediately before returning to the survey.
+            One final transcript save before leaving.
           */
           await saveTranscript();
 
@@ -1200,8 +1152,7 @@
           );
 
           /*
-            Return to the previous page in this tab,
-            which should be the Qualtrics survey.
+            Return to the previous page in this tab.
           */
           window.history.back();
 
