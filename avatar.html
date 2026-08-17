@@ -80,7 +80,7 @@
     }
 
     #finishBtn {
-      display: none;
+      display: inline-block;
       margin-top: 4px;
       padding: 12px 20px;
 
@@ -97,8 +97,8 @@
     }
 
     #finishBtn:disabled {
-      cursor: wait;
-      opacity: 0.7;
+      cursor: not-allowed;
+      opacity: 0.45;
     }
   </style>
 </head>
@@ -106,12 +106,9 @@
 <body>
   <div class="wrap">
     <div class="card">
+
       <h2>Chat Assistant</h2>
 
-      <!--
-        The avatar remains hidden and muted in this condition.
-        Anam still streams to this video element in the background.
-      -->
       <video
         id="avatar"
         autoplay
@@ -139,93 +136,124 @@
         </button>
       </div>
 
-      <button id="finishBtn">
+      <button id="finishBtn" disabled>
         Finish conversation and return to survey
       </button>
+
     </div>
   </div>
 
+
   <script type="module">
+
     import {
       createClient,
       AnamEvent
     } from "https://esm.sh/@anam-ai/js-sdk";
 
+
     /*
-      Condition 2:
+      CONDITION 2:
       Text interface + speech input
     */
     const CONDITION =
       "interface_text_input_speech";
 
+
     /*
-      Shared backend used by all four conditions.
+      Shared Render backend.
     */
     const API_BASE_URL =
       "https://anam-token-server-1.onrender.com";
 
-    /*
-      Exact greeting Sophie says aloud.
 
-      We display this locally because Anam's textual
-      version of the first greeting currently omits "Hi".
+    /*
+      Exact initial greeting.
+
+      We display this ourselves because Anam's
+      text transcription currently drops "Hi".
     */
     const INITIAL_GREETING =
       "Hi there, welcome to FastFlights' help centre. My name is Sophie and I am here to assist you. Before we get started, could you please provide the participant number that was given to you prior to opening this page?";
+
 
     let client = null;
 
     let transcript = [];
 
+
     /*
-      Participant ID handling.
+      Participant ID.
     */
     let participantId = null;
+
     let firstUserMessage = true;
+
 
     /*
       User speech-display state.
     */
     let userBuffer = "";
+
     let userRow = null;
+
     let userText = null;
+
 
     /*
       Assistant display state.
     */
     let assistantBuffer = "";
+
     let assistantRow = null;
+
     let assistantText = null;
+
     let activePersonaMessageId = null;
 
+
     /*
-      Prevent duplicate finalized Anam persona messages.
+      Prevent duplicate finalized
+      persona messages.
     */
     const finalizedPersonaMessageIds =
       new Set();
 
-    /*
-      The first Anam persona message is the greeting.
 
-      We display the exact greeting ourselves, so
-      Anam's corresponding textual version is ignored.
+    /*
+      The first Anam persona message is
+      the initial greeting.
+
+      We ignore that textual version.
     */
-    let initialAnamGreetingCompleted = false;
+    let initialAnamGreetingCompleted =
+      false;
+
 
     const statusEl =
-      document.getElementById("status");
+      document.getElementById(
+        "status"
+      );
 
     const chatbox =
-      document.getElementById("chatbox");
+      document.getElementById(
+        "chatbox"
+      );
 
     const startBtn =
-      document.getElementById("startBtn");
+      document.getElementById(
+        "startBtn"
+      );
 
     const finishBtn =
-      document.getElementById("finishBtn");
+      document.getElementById(
+        "finishBtn"
+      );
 
     const avatar =
-      document.getElementById("avatar");
+      document.getElementById(
+        "avatar"
+      );
 
 
     function setStatus(text) {
@@ -233,9 +261,6 @@
     }
 
 
-    /*
-      Simple delay helper.
-    */
     function wait(milliseconds) {
       return new Promise(
         (resolve) =>
@@ -248,46 +273,72 @@
 
 
     /*
-      Clean superficial assistant-display artefacts only.
+      Clean superficial assistant text artefacts only.
     */
     function cleanDisplayText(text) {
+
       return String(text || "")
-        .replace(/\*\*(.*?)\*\*/gs, "$1")
-        .replace(/\s+([.,!?;:])/g, "$1")
-        .replace(/\s+(['’])/g, "$1");
+
+        .replace(
+          /\*\*(.*?)\*\*/gs,
+          "$1"
+        )
+
+        .replace(
+          /\s+([.,!?;:])/g,
+          "$1"
+        )
+
+        .replace(
+          /\s+(['’])/g,
+          "$1"
+        );
+
     }
 
 
     /*
-      Extract participant ID from the first
-      transcribed user response.
+      PARTICIPANT ID EXTRACTION
     */
     function extractParticipantId(text) {
+
       const trimmedText =
         String(text).trim();
+
 
       if (!trimmedText) {
         return null;
       }
+
 
       const directMatch =
         trimmedText.match(
           /\b[A-Za-z]+[-_]?\d+[A-Za-z0-9_-]*\b/i
         );
 
+
       if (directMatch) {
+
         return directMatch[0]
+
           .replace(
             /[^A-Za-z0-9_-]/g,
             ""
           )
-          .slice(0, 100);
+
+          .slice(
+            0,
+            100
+          );
+
       }
+
 
       const candidates =
         trimmedText.match(
           /[A-Za-z0-9_-]+/g
         );
+
 
       if (
         !candidates ||
@@ -296,182 +347,287 @@
         return null;
       }
 
+
       const likelyIds =
         candidates.filter(
           (candidate) =>
-            /[0-9_-]/.test(candidate)
+            /[0-9_-]/.test(
+              candidate
+            )
         );
+
 
       const selectedId =
         likelyIds.length > 0
+
           ? likelyIds[
               likelyIds.length - 1
             ]
+
           : candidates[
               candidates.length - 1
             ];
 
+
       const cleanedId =
         selectedId
+
           .trim()
+
           .replace(
             /[^A-Za-z0-9_-]/g,
             ""
           )
-          .slice(0, 100);
+
+          .slice(
+            0,
+            100
+          );
+
 
       return cleanedId || null;
+
     }
 
 
     /*
+      ================================
       USER SPEECH DISPLAY
+      ================================
     */
 
     function beginUserMessage() {
+
       userRow =
-        document.createElement("p");
+        document.createElement(
+          "p"
+        );
+
 
       const label =
-        document.createElement("b");
+        document.createElement(
+          "b"
+        );
+
 
       label.textContent =
         "You: ";
 
-      userText =
-        document.createElement("span");
 
-      userText.textContent = "";
+      userText =
+        document.createElement(
+          "span"
+        );
+
+
+      userText.textContent =
+        "";
+
+
       userText.style.whiteSpace =
         "pre-wrap";
 
-      userRow.appendChild(label);
-      userRow.appendChild(userText);
 
-      chatbox.appendChild(userRow);
+      userRow.appendChild(
+        label
+      );
+
+
+      userRow.appendChild(
+        userText
+      );
+
+
+      chatbox.appendChild(
+        userRow
+      );
+
 
       chatbox.scrollTop =
         chatbox.scrollHeight;
+
     }
 
 
-    function updateUserMessage(chunk) {
+    function updateUserMessage(
+      chunk
+    ) {
+
       if (
         !userRow ||
         !userText
       ) {
+
         beginUserMessage();
+
       }
+
 
       userBuffer +=
         chunk || "";
 
+
       userText.textContent =
         userBuffer;
 
+
       chatbox.scrollTop =
         chatbox.scrollHeight;
+
     }
 
 
     async function finishUserMessage() {
+
       const finalText =
         userBuffer.trim();
 
+
       if (finalText) {
+
         transcript.push({
-          role: "user",
-          content: finalText,
+
+          role:
+            "user",
+
+          content:
+            finalText,
+
           timestamp:
             new Date().toISOString()
+
         });
 
-        if (firstUserMessage) {
+
+        if (
+          firstUserMessage
+        ) {
+
           participantId =
             extractParticipantId(
               finalText
             );
 
+
           firstUserMessage =
             false;
 
+
           if (participantId) {
+
             console.log(
               "Participant ID detected:",
               participantId
             );
+
           } else {
+
             console.warn(
               "No participant ID could be detected from the first spoken response."
             );
+
           }
+
         }
+
       }
 
+
       userBuffer = "";
+
       userRow = null;
+
       userText = null;
+
     }
 
 
     /*
+      ================================
       ASSISTANT DISPLAY
+      ================================
     */
 
     function beginAssistantMessage(
       messageId = null
     ) {
+
       assistantRow =
-        document.createElement("p");
+        document.createElement(
+          "p"
+        );
+
 
       const label =
-        document.createElement("b");
+        document.createElement(
+          "b"
+        );
+
 
       label.textContent =
         "Assistant: ";
 
-      assistantText =
-        document.createElement("span");
 
-      assistantText.textContent = "";
+      assistantText =
+        document.createElement(
+          "span"
+        );
+
+
+      assistantText.textContent =
+        "";
+
+
       assistantText.style.whiteSpace =
         "pre-wrap";
 
-      assistantRow.appendChild(label);
+
+      assistantRow.appendChild(
+        label
+      );
+
+
       assistantRow.appendChild(
         assistantText
       );
+
 
       chatbox.appendChild(
         assistantRow
       );
 
+
       activePersonaMessageId =
         messageId;
 
+
       chatbox.scrollTop =
         chatbox.scrollHeight;
+
     }
 
 
     /*
-      Display the exact known initial greeting.
+      INITIAL GREETING
 
-      It appears in uneven chunks with slower,
-      irregular timing to resemble normal Anam
-      streaming behaviour.
+      Uneven chunks +
+      deliberately irregular timing.
     */
     async function displayInitialGreeting() {
+
       beginAssistantMessage();
 
+
       let position = 0;
+
 
       while (
         position <
         INITIAL_GREETING.length
       ) {
+
         /*
-          Reveal approximately 2–10 characters
+          Approximately 2–10 characters
           per update.
         */
         const chunkSize =
@@ -479,11 +635,13 @@
             Math.random() * 9
           ) + 2;
 
+
         position =
           Math.min(
             position + chunkSize,
             INITIAL_GREETING.length
           );
+
 
         assistantText.textContent =
           INITIAL_GREETING.slice(
@@ -491,8 +649,10 @@
             position
           );
 
+
         chatbox.scrollTop =
           chatbox.scrollHeight;
+
 
         /*
           Irregular delay:
@@ -503,54 +663,76 @@
             Math.random() * 141
           ) + 90;
 
+
         /*
-          Additional pause when the current
-          chunk ends on punctuation:
-          approximately 80–220 ms.
+          Additional pause at punctuation.
         */
         const lastCharacter =
           INITIAL_GREETING[
             position - 1
           ];
 
+
         if (
           lastCharacter === "." ||
           lastCharacter === "?" ||
           lastCharacter === ","
         ) {
+
           delay +=
             Math.floor(
               Math.random() * 141
             ) + 80;
+
         }
 
-        await wait(delay);
+
+        await wait(
+          delay
+        );
+
       }
 
+
       transcript.push({
-        role: "assistant",
+
+        role:
+          "assistant",
+
         content:
           INITIAL_GREETING,
+
         timestamp:
           new Date().toISOString()
+
       });
+
 
       console.log(
         "Initial greeting displayed progressively:",
         INITIAL_GREETING
       );
 
+
       assistantBuffer = "";
+
       assistantRow = null;
+
       assistantText = null;
-      activePersonaMessageId = null;
+
+      activePersonaMessageId =
+        null;
+
     }
 
 
     /*
-      Display normal Anam persona responses progressively.
+      Normal Anam assistant responses.
     */
-    function updateAssistantMessage(event) {
+    function updateAssistantMessage(
+      event
+    ) {
+
       if (
         !assistantRow ||
         !assistantText ||
@@ -561,124 +743,179 @@
             activePersonaMessageId
         )
       ) {
-        assistantBuffer = "";
+
+        assistantBuffer =
+          "";
+
 
         beginAssistantMessage(
           event.id || null
         );
+
       }
+
 
       if (
         !activePersonaMessageId &&
         event.id
       ) {
+
         activePersonaMessageId =
           event.id;
+
       }
+
 
       assistantBuffer +=
         event.content || "";
+
 
       assistantText.textContent =
         cleanDisplayText(
           assistantBuffer
         );
 
+
       chatbox.scrollTop =
         chatbox.scrollHeight;
+
     }
 
 
     /*
+      ================================
       TRANSCRIPT SAVING
+      ================================
     */
 
     async function saveTranscript() {
+
       if (!participantId) {
+
         console.warn(
           "Transcript not saved because no participant ID has been detected."
         );
 
+
         return;
+
       }
+
 
       const response =
         await fetch(
+
           `${API_BASE_URL}/api/save-transcript`,
+
           {
-            method: "POST",
+
+            method:
+              "POST",
 
             headers: {
+
               "Content-Type":
                 "application/json"
+
             },
 
-            body: JSON.stringify({
-              participantId:
-                participantId,
+            body:
+              JSON.stringify({
 
-              condition:
-                CONDITION,
+                participantId:
+                  participantId,
 
-              transcript:
-                transcript
-            })
+                condition:
+                  CONDITION,
+
+                transcript:
+                  transcript
+
+              })
+
           }
+
         );
+
 
       let data;
 
+
       try {
+
         data =
           await response.json();
-      } catch (jsonError) {
+
+      } catch (
+        jsonError
+      ) {
+
         throw new Error(
           "The transcript endpoint returned an invalid response."
         );
+
       }
 
+
       if (!response.ok) {
+
         throw new Error(
+
           data.error ||
-            "Transcript save failed."
+
+          "Transcript save failed."
+
         );
+
       }
+
 
       console.log(
         "Transcript saved:",
         data
       );
+
     }
 
 
     /*
-      Finalize normal assistant responses using
-      Anam's complete message history.
+      Finalize Anam persona response using
+      complete message history.
     */
     async function finalizeAssistantFromHistory(
       message
     ) {
+
       if (
         !message ||
-        message.role !== "persona" ||
+        message.role !==
+          "persona" ||
         !message.content
       ) {
+
         return;
+
       }
+
 
       if (
         message.id &&
-        finalizedPersonaMessageIds.has(
-          message.id
-        )
+        finalizedPersonaMessageIds
+          .has(
+            message.id
+          )
       ) {
+
         return;
+
       }
+
 
       const finalContent =
         String(
           message.content
         ).trim();
+
 
       if (
         assistantRow &&
@@ -690,47 +927,72 @@
             activePersonaMessageId
         )
       ) {
+
         assistantText.textContent =
           cleanDisplayText(
             finalContent
           );
+
       } else {
-        assistantBuffer = "";
+
+        assistantBuffer =
+          "";
+
 
         beginAssistantMessage(
           message.id || null
         );
 
+
         assistantText.textContent =
           cleanDisplayText(
             finalContent
           );
+
       }
+
 
       chatbox.scrollTop =
         chatbox.scrollHeight;
 
+
       transcript.push({
-        role: "assistant",
+
+        role:
+          "assistant",
+
         content:
           finalContent,
+
         timestamp:
           new Date().toISOString()
+
       });
 
+
       if (message.id) {
-        finalizedPersonaMessageIds.add(
-          message.id
-        );
+
+        finalizedPersonaMessageIds
+          .add(
+            message.id
+          );
+
       }
 
+
       try {
+
         await saveTranscript();
-      } catch (error) {
+
+      } catch (
+        error
+      ) {
+
         console.error(
           "Transcript autosave error:",
           error
         );
+
 
         setStatus(
           "Connected, but transcript saving failed: " +
@@ -739,192 +1001,271 @@
               String(error)
             )
         );
+
       }
 
+
       assistantBuffer = "";
+
       assistantRow = null;
+
       assistantText = null;
-      activePersonaMessageId = null;
+
+      activePersonaMessageId =
+        null;
+
     }
 
 
     /*
-      Process Anam's complete message history.
+      COMPLETE MESSAGE HISTORY
     */
     async function handleMessageHistoryUpdated(
       messages
     ) {
+
       console.log(
         "ANAM MESSAGE HISTORY UPDATED:",
         messages
       );
 
+
       if (
-        !Array.isArray(messages) ||
+        !Array.isArray(
+          messages
+        ) ||
         messages.length === 0
       ) {
+
         return;
+
       }
+
 
       let latestPersonaMessage =
         null;
 
+
       for (
         let i =
           messages.length - 1;
+
         i >= 0;
+
         i--
       ) {
+
         if (
           messages[i]?.role ===
           "persona"
         ) {
+
           latestPersonaMessage =
             messages[i];
 
+
           break;
+
         }
+
       }
 
-      if (!latestPersonaMessage) {
+
+      if (
+        !latestPersonaMessage
+      ) {
+
         return;
+
       }
+
 
       /*
-        First persona message is Anam's imperfect
-        text version of the greeting.
-
-        Ignore it because the exact greeting is
-        displayed locally.
+        Ignore Anam's imperfect first
+        textual greeting.
       */
       if (
         !initialAnamGreetingCompleted
       ) {
+
         initialAnamGreetingCompleted =
           true;
+
 
         if (
           latestPersonaMessage.id
         ) {
-          finalizedPersonaMessageIds.add(
-            latestPersonaMessage.id
-          );
+
+          finalizedPersonaMessageIds
+            .add(
+              latestPersonaMessage.id
+            );
+
         }
+
 
         console.log(
           "Initial Anam greeting ignored."
         );
 
+
         return;
+
       }
+
 
       if (
         latestPersonaMessage.id &&
-        finalizedPersonaMessageIds.has(
-          latestPersonaMessage.id
-        )
+        finalizedPersonaMessageIds
+          .has(
+            latestPersonaMessage.id
+          )
       ) {
+
         return;
+
       }
+
 
       await finalizeAssistantFromHistory(
         latestPersonaMessage
       );
+
     }
 
 
     /*
+      ================================
       MICROPHONE ACCESS
+      ================================
     */
 
     async function requestMicrophoneAccess() {
+
       if (
         !navigator.mediaDevices ||
         !navigator.mediaDevices
           .getUserMedia
       ) {
+
         throw new Error(
           "This browser does not support microphone access."
         );
+
       }
 
+
       const micStream =
-        await navigator.mediaDevices
+        await navigator
+          .mediaDevices
           .getUserMedia({
-            audio: true
+
+            audio:
+              true
+
           });
 
-      /*
-        Permission check complete.
-        Anam establishes its own audio stream
-        when the session starts.
-      */
+
       micStream
         .getTracks()
         .forEach(
           (track) =>
             track.stop()
         );
+
     }
 
 
     /*
-      SESSION START
+      ================================
+      START SESSION
+      ================================
     */
 
     async function startSession() {
+
       try {
+
         setStatus(
           "Requesting microphone access..."
         );
 
+
         await requestMicrophoneAccess();
+
 
         setStatus(
           "Creating session..."
         );
 
+
         const response =
           await fetch(
+
             `${API_BASE_URL}/api/session-token`,
+
             {
-              method: "POST"
+              method:
+                "POST"
             }
+
           );
+
 
         let data;
 
+
         try {
+
           data =
             await response.json();
-        } catch (jsonError) {
+
+        } catch (
+          jsonError
+        ) {
+
           throw new Error(
             "The session-token endpoint returned an invalid response."
           );
+
         }
 
+
         if (!response.ok) {
+
           console.error(
             "Session-token response:",
             data
           );
 
+
           throw new Error(
+
             data.error ||
-              data.message ||
-              "Failed to get session token."
+
+            data.message ||
+
+            "Failed to get session token."
+
           );
+
         }
 
-        if (!data.sessionToken) {
+
+        if (
+          !data.sessionToken
+        ) {
+
           throw new Error(
             "No session token was returned by the backend."
           );
+
         }
+
 
         /*
           Speech-input condition:
-          do not disable microphone input.
+          microphone remains enabled.
         */
         client =
           createClient(
@@ -936,14 +1277,19 @@
           REAL-TIME MESSAGE STREAM
         */
         client.addListener(
+
           AnamEvent
             .MESSAGE_STREAM_EVENT_RECEIVED,
 
-          async (event) => {
+          async (
+            event
+          ) => {
+
             console.log(
               "ANAM STREAM EVENT:",
               event
             );
+
 
             /*
               USER SPEECH
@@ -952,17 +1298,23 @@
               event.role ===
               "user"
             ) {
+
               updateUserMessage(
                 event.content
               );
 
+
               if (
                 event.endOfSpeech
               ) {
+
                 await finishUserMessage();
+
               }
 
+
               return;
+
             }
 
 
@@ -973,43 +1325,62 @@
               event.role ===
               "persona"
             ) {
+
               /*
-                Ignore Anam's textual version
-                of the initial greeting.
+                Ignore the initial
+                Anam greeting stream.
               */
               if (
                 !initialAnamGreetingCompleted
               ) {
+
                 return;
+
               }
+
 
               updateAssistantMessage(
                 event
               );
+
             }
+
           }
+
         );
 
 
         /*
-          COMPLETE ANAM MESSAGE HISTORY
+          COMPLETE MESSAGE HISTORY
         */
         client.addListener(
+
           AnamEvent
             .MESSAGE_HISTORY_UPDATED,
 
-          async (messages) => {
+          async (
+            messages
+          ) => {
+
             try {
+
               await handleMessageHistoryUpdated(
                 messages
               );
-            } catch (error) {
+
+            } catch (
+              error
+            ) {
+
               console.error(
                 "Message-history processing error:",
                 error
               );
+
             }
+
           }
+
         );
 
 
@@ -1021,164 +1392,247 @@
             "avatar"
           );
 
-        avatar.muted = true;
-        avatar.volume = 0;
+
+        avatar.muted =
+          true;
+
+        avatar.volume =
+          0;
+
 
         setStatus(
           "Connected"
         );
 
-      } catch (error) {
+      } catch (
+        error
+      ) {
+
         console.error(
           "Session start error:",
           error
         );
 
+
         setStatus(
+
           "Failed to start session: " +
-            (
-              error?.message ||
-              String(error)
-            )
+
+          (
+            error?.message ||
+            String(error)
+          )
+
         );
 
+
         throw error;
+
       }
+
     }
 
 
     /*
+      ================================
       START BUTTON
+      ================================
     */
 
     startBtn.addEventListener(
+
       "click",
+
       async () => {
+
         try {
+
           startBtn.disabled =
             true;
+
 
           startBtn.textContent =
             "Starting...";
 
-          await startSession();
 
           /*
-            Reveal the chat interface first.
+            Establish Anam session.
+          */
+          await startSession();
+
+
+          /*
+            Reveal chat area.
           */
           startBtn.style.display =
             "none";
 
+
           chatbox.style.background =
             "white";
 
+
           /*
-            Display Sophie's exact initial greeting.
+            Display exact greeting.
           */
           await displayInitialGreeting();
 
-          /*
-            Show the Finish button once the
-            conversation is ready.
 
-            The italic instruction has already been
-            visible since the page first loaded.
+          /*
+            Conversation has now successfully
+            started, so enable the Finish button.
           */
-          finishBtn.style.display =
-            "inline-block";
+          finishBtn.disabled =
+            false;
+
 
           setStatus(
             "Connected"
           );
 
-        } catch (error) {
+
+        } catch (
+          error
+        ) {
+
           console.error(
             "Full start-session error:",
             error
           );
 
+
           startBtn.disabled =
             false;
+
 
           startBtn.textContent =
             "Start conversation";
 
+
           startBtn.style.display =
             "block";
+
 
           chatbox.style.background =
             "black";
 
-          finishBtn.style.display =
-            "none";
+
+          /*
+            Keep Finish unavailable if
+            the conversation failed to start.
+          */
+          finishBtn.disabled =
+            true;
+
 
           setStatus(
+
             "Failed to start session: " +
-              (
-                error?.message ||
-                String(error)
-              )
+
+            (
+              error?.message ||
+              String(error)
+            )
+
           );
+
         }
+
       }
+
     );
 
 
     /*
+      ================================
       FINISH CONVERSATION BUTTON
+      ================================
     */
 
     finishBtn.addEventListener(
+
       "click",
+
       async () => {
+
         try {
+
+          /*
+            Prevent repeated clicks.
+          */
           finishBtn.disabled =
             true;
+
 
           finishBtn.textContent =
             "Finishing...";
 
-          setStatus(
-            "Saving your conversation..."
-          );
 
           /*
-            One final transcript save before leaving.
+            Perform one final transcript
+            save if a participant ID exists.
           */
-          await saveTranscript();
+          if (participantId) {
+
+            setStatus(
+              "Saving your conversation..."
+            );
+
+
+            await saveTranscript();
+
+          }
+
 
           setStatus(
             "Returning to the survey..."
           );
 
+
           /*
-            Return to the previous page in this tab.
+            Return to the previous page
+            in this browser tab.
           */
           window.history.back();
 
-        } catch (error) {
+
+        } catch (
+          error
+        ) {
+
           console.error(
             "Finish-conversation error:",
             error
           );
 
+
           finishBtn.disabled =
             false;
+
 
           finishBtn.textContent =
             "Finish conversation and return to survey";
 
+
           setStatus(
             "The conversation could not be saved. Please try the Finish button again."
           );
+
         }
+
       }
+
     );
 
 
+    /*
+      INITIAL STATUS
+    */
     setStatus(
       "Click the button to start."
     );
+
   </script>
+
 </body>
 </html>
