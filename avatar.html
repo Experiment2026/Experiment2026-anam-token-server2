@@ -188,6 +188,14 @@
       "Hi there, welcome to FastFlights' help centre. My name is Sophie and I am here to assist you. Before we get started, could you please provide the participant number that was given to you prior to opening this page?";
 
 
+    /*
+      Finish button becomes available five minutes
+      after the conversation has successfully started.
+    */
+    const FINISH_BUTTON_DELAY =
+      5 * 60 * 1000;
+
+
     let client = null;
 
     let transcript = [];
@@ -239,6 +247,12 @@
     */
     let initialAnamGreetingCompleted =
       false;
+
+
+    /*
+      Finish-button timer.
+    */
+    let finishButtonTimer = null;
 
 
     const statusEl =
@@ -1434,6 +1448,7 @@
         */
         setConnectedStatus();
 
+
       } catch (
         error
       ) {
@@ -1485,6 +1500,9 @@
             "Starting...";
 
 
+          /*
+            Establish the Anam session first.
+          */
           await startSession();
 
 
@@ -1497,6 +1515,35 @@
 
 
           /*
+            Keep Finish disabled.
+
+            Start the five-minute timer as soon
+            as the conversation has successfully
+            connected.
+          */
+          finishBtn.disabled =
+            true;
+
+
+          finishButtonTimer =
+            setTimeout(
+              () => {
+
+                finishBtn.disabled =
+                  false;
+
+
+                console.log(
+                  "Finish button enabled after five minutes."
+                );
+
+              },
+
+              FINISH_BUTTON_DELAY
+            );
+
+
+          /*
             Display exact greeting
             progressively.
           */
@@ -1504,15 +1551,10 @@
 
 
           /*
-            Conversation has successfully
-            started, so enable Finish.
-          */
-          finishBtn.disabled =
-            false;
-
-
-          /*
             Keep Connected bold.
+
+            Do not enable Finish here:
+            the timer controls that.
           */
           setConnectedStatus();
 
@@ -1525,6 +1567,25 @@
             "Full start-session error:",
             error
           );
+
+
+          /*
+            Cancel the timer if startup
+            somehow fails after creation.
+          */
+          if (
+            finishButtonTimer
+          ) {
+
+            clearTimeout(
+              finishButtonTimer
+            );
+
+
+            finishButtonTimer =
+              null;
+
+          }
 
 
           startBtn.disabled =
@@ -1579,6 +1640,9 @@
 
         try {
 
+          /*
+            Prevent repeated clicks.
+          */
           finishBtn.disabled =
             true;
 
@@ -1621,6 +1685,11 @@
           );
 
 
+          /*
+            The five-minute minimum has already
+            elapsed at this point, so re-enable
+            Finish if saving/navigation fails.
+          */
           finishBtn.disabled =
             false;
 
