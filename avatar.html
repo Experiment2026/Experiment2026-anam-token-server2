@@ -196,17 +196,27 @@
       5 * 60 * 1000;
 
 
+    /*
+      Read the participant ID directly from
+      the URL supplied by Qualtrics.
+
+      Example:
+      ?participantId=7289
+    */
+    const urlParams =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    const participantId =
+      urlParams.get(
+        "participantId"
+      );
+
+
     let client = null;
 
     let transcript = [];
-
-
-    /*
-      Participant ID.
-    */
-    let participantId = null;
-
-    let firstUserMessage = true;
 
 
     /*
@@ -282,6 +292,35 @@
 
 
     /*
+      Verify that Qualtrics supplied
+      a participant ID.
+    */
+    if (participantId) {
+
+      console.log(
+        "Participant ID received from Qualtrics:",
+        participantId
+      );
+
+    } else {
+
+      console.error(
+        "No participant ID was supplied in the URL."
+      );
+
+      startBtn.disabled =
+        true;
+
+      startBtn.textContent =
+        "Participant ID missing";
+
+      statusEl.textContent =
+        "Unable to start: no participant ID was supplied by the survey.";
+
+    }
+
+
+    /*
       Normal status text.
     */
     function setStatus(text) {
@@ -331,104 +370,6 @@
           /\s+(['’])/g,
           "$1"
         );
-
-    }
-
-
-    /*
-      ================================
-      PARTICIPANT ID EXTRACTION
-      ================================
-    */
-
-    function extractParticipantId(text) {
-
-      const trimmedText =
-        String(text).trim();
-
-
-      if (!trimmedText) {
-        return null;
-      }
-
-
-      const directMatch =
-        trimmedText.match(
-          /\b[A-Za-z]+[-_]?\d+[A-Za-z0-9_-]*\b/i
-        );
-
-
-      if (directMatch) {
-
-        return directMatch[0]
-
-          .replace(
-            /[^A-Za-z0-9_-]/g,
-            ""
-          )
-
-          .slice(
-            0,
-            100
-          );
-
-      }
-
-
-      const candidates =
-        trimmedText.match(
-          /[A-Za-z0-9_-]+/g
-        );
-
-
-      if (
-        !candidates ||
-        candidates.length === 0
-      ) {
-
-        return null;
-
-      }
-
-
-      const likelyIds =
-        candidates.filter(
-          (candidate) =>
-            /[0-9_-]/.test(
-              candidate
-            )
-        );
-
-
-      const selectedId =
-        likelyIds.length > 0
-
-          ? likelyIds[
-              likelyIds.length - 1
-            ]
-
-          : candidates[
-              candidates.length - 1
-            ];
-
-
-      const cleanedId =
-        selectedId
-
-          .trim()
-
-          .replace(
-            /[^A-Za-z0-9_-]/g,
-            ""
-          )
-
-          .slice(
-            0,
-            100
-          );
-
-
-      return cleanedId || null;
 
     }
 
@@ -540,38 +481,6 @@
             new Date().toISOString()
 
         });
-
-
-        if (
-          firstUserMessage
-        ) {
-
-          participantId =
-            extractParticipantId(
-              finalText
-            );
-
-
-          firstUserMessage =
-            false;
-
-
-          if (participantId) {
-
-            console.log(
-              "Participant ID detected:",
-              participantId
-            );
-
-          } else {
-
-            console.warn(
-              "No participant ID could be detected from the first spoken response."
-            );
-
-          }
-
-        }
 
       }
 
@@ -832,7 +741,7 @@
       if (!participantId) {
 
         console.warn(
-          "Transcript not saved because no participant ID has been detected."
+          "Transcript not saved because no participant ID was supplied."
         );
 
 
@@ -1099,7 +1008,7 @@
 
         if (
           messages[i]?.role ===
-          "persona"
+            "persona"
         ) {
 
           latestPersonaMessage =
@@ -1340,7 +1249,7 @@
             */
             if (
               event.role ===
-              "user"
+                "user"
             ) {
 
               updateUserMessage(
@@ -1363,11 +1272,11 @@
 
 
             /*
-              SOPHIE / PERSONA
+              ARJUN / PERSONA
             */
             if (
               event.role ===
-              "persona"
+                "persona"
             ) {
 
               if (
@@ -1491,6 +1400,21 @@
       async () => {
 
         try {
+
+          /*
+            Participant ID must already
+            have been supplied by Qualtrics.
+          */
+          if (!participantId) {
+
+            setStatus(
+              "Unable to start: no participant ID was supplied by the survey."
+            );
+
+            return;
+
+          }
+
 
           startBtn.disabled =
             true;
